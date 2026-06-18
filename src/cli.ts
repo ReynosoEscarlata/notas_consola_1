@@ -2,9 +2,11 @@
 import { Command, CommanderError } from "commander";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatNotesAsJson, formatNotesAsMarkdown } from "./cli/format-export.js";
 import { printNoteList } from "./cli/format-note-list.js";
 import { openDatabase } from "./db/connection.js";
 import { deleteNote, type DeleteNoteError } from "./logic/delete.js";
+import { exportNotes, type ExportNotesError } from "./logic/export.js";
 import { listNotes, type ListNotesError } from "./logic/list.js";
 import { addNote, type AddNoteError } from "./logic/notes.js";
 import { searchNotes, type SearchNotesError } from "./logic/search.js";
@@ -59,6 +61,13 @@ function formatDeleteNoteError(error: DeleteNoteError): string {
       return "Error: Id no válido para eliminar";
     case "not_found":
       return `Error: no existe una nota con id ${error.id}`;
+  }
+}
+
+function formatExportNotesError(error: ExportNotesError): string {
+  switch (error.kind) {
+    case "unsupported_format":
+      return `Error: formato no soportado: ${error.format}`;
   }
 }
 
@@ -191,7 +200,19 @@ program
   .command("export")
   .description("Exporta todas las notas")
   .requiredOption("--format <json|md>", "formato de salida")
-  .action(() => notImplemented("export"));
+  .action((options: { format: string }) => {
+    const db = openDatabase(DEFAULT_DB_PATH);
+    const result = exportNotes(db, options.format);
+    db.close();
+
+    if (!result.ok) {
+      console.error(formatExportNotesError(result.error));
+      process.exitCode = EXIT_CODE.INVALID_INPUT;
+      return;
+    }
+
+    console.log(result.format === "json" ? formatNotesAsJson(result.notes) : formatNotesAsMarkdown(result.notes));
+  });
 
 program
   .command("repair")
