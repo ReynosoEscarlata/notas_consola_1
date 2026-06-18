@@ -2,7 +2,9 @@
 import { Command } from "commander";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { printNoteList } from "./cli/format-note-list.js";
 import { openDatabase } from "./db/connection.js";
+import { listNotes, type ListNotesError } from "./logic/list.js";
 import { addNote, type AddNoteError } from "./logic/notes.js";
 import { EXIT_CODE } from "./types.js";
 
@@ -22,6 +24,17 @@ function formatAddNoteError(error: AddNoteError): string {
       return `Error: el tag "${error.tag}" contiene caracteres no permitidos (solo se aceptan minúsculas, números y guion)`;
     case "duplicate_tag":
       return `Error: el tag "${error.tag}" está repetido`;
+  }
+}
+
+function formatListNotesError(error: ListNotesError): string {
+  switch (error.kind) {
+    case "invalid_page":
+      return "Error: --page debe ser un entero positivo";
+    case "invalid_per_page":
+      return "Error: --per-page debe ser un entero positivo";
+    case "per_page_too_large":
+      return "Error: --per-page no puede ser mayor a 20";
   }
 }
 
@@ -71,7 +84,29 @@ program
   .option("--tag <tag>", "filtra por una etiqueta exacta")
   .option("--page <n>", "número de página", "1")
   .option("--per-page <n>", "notas por página (máx. 20)", "10")
-  .action(() => notImplemented("list"));
+  .action((options: { tag?: string; page: string; perPage: string }) => {
+    const db = openDatabase(DEFAULT_DB_PATH);
+    const result = listNotes(db, {
+      ...(options.tag !== undefined ? { tag: options.tag } : {}),
+      page: options.page,
+      perPage: options.perPage,
+    });
+    db.close();
+
+    if (!result.ok) {
+      console.error(formatListNotesError(result.error));
+      process.exitCode = EXIT_CODE.INVALID_INPUT;
+      return;
+    }
+
+    printNoteList(
+      result.result.notes,
+      result.result.page,
+      result.result.totalPages,
+      result.result.total,
+      "No hay notas para mostrar.",
+    );
+  });
 
 program
   .command("search")
