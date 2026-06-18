@@ -128,7 +128,7 @@ Muestra descripción de la CLI, lista de comandos y, para cada uno, sus flags y 
 ### Comando o flag desconocidos
 
 - Comando no reconocido (ej. `nota foo`): stderr `Error: Comando desconocido: foo`, seguido de la lista de comandos válidos (`add`, `list`, `search`, `delete`, `export`, `repair`, `--help`), exit code 2.
-- Flag no reconocida para un comando válido (ej. `nota list --bogus`): stderr `Error: opción desconocida: --bogus`, exit code 2.
+- Flag no reconocida para un comando válido (ej. `nota list --bogus`): stderr `Error: opción desconocida: --bogus`, exit code 2. Se detecta de inmediato durante el parseo de argumentos, **antes** de ejecutar cualquier lógica del comando (no llega a abrir la base de datos ni a correr la acción); aplica por igual a los 6 comandos.
 
 ## 5. Manejo de errores y exit codes
 

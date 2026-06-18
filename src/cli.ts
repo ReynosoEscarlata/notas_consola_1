@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from "commander";
+import { Command, CommanderError } from "commander";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { printNoteList } from "./cli/format-note-list.js";
@@ -65,6 +65,17 @@ function formatDeleteNoteError(error: DeleteNoteError): string {
 const program = new Command();
 
 program.name("nota").description("CLI de notas personales con etiquetas, búsqueda y persistencia en SQLite.");
+
+// Deben ir antes de definir los subcomandos: commander copia esta configuración
+// a cada subcomando en el momento de program.command(...), no al momento de parse().
+program.exitOverride();
+
+let bufferedStderr = "";
+program.configureOutput({
+  writeErr: (str) => {
+    bufferedStderr += str;
+  },
+});
 
 let tagOptionCallCount = 0;
 
@@ -196,4 +207,21 @@ if (deleteIndex !== -1 && /^-\d/.test(rawArgs[deleteIndex + 1] ?? "")) {
   rawArgs.splice(deleteIndex + 1, 0, "--");
 }
 
-program.parse(rawArgs, { from: "user" });
+try {
+  program.parse(rawArgs, { from: "user" });
+} catch (error) {
+  if (!(error instanceof CommanderError)) {
+    throw error;
+  }
+
+  if (error.code === "commander.unknownOption") {
+    const flag = /'([^']+)'/.exec(error.message)?.[1] ?? error.message;
+    console.error(`Error: opción desconocida: ${flag}`);
+    process.exitCode = EXIT_CODE.INVALID_INPUT;
+  } else {
+    if (bufferedStderr !== "") {
+      process.stderr.write(bufferedStderr);
+    }
+    process.exitCode = error.exitCode;
+  }
+}
