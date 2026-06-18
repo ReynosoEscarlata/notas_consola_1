@@ -57,14 +57,19 @@ CREATE TABLE note_tags (
   - Si se pasa vacío o solo espacios (ej. `nota add ""`) → stderr `Error: el texto de la nota no puede estar vacío`, exit code 2.
   - Son dos validaciones distintas con mensajes distintos: una es "no me diste el argumento", la otra es "me lo diste pero no sirve".
 - `--tag`: opcional. Lista separada por comas únicamente.
-  - Cada tag se normaliza con `trim()` y minúsculas, y debe cumplir el charset `[a-z0-9-]+` tras la normalización. Cualquier otro carácter (espacios, acentos, símbolos, emojis) rechaza el comando completo: stderr `Error: el tag "<tag>" contiene caracteres no permitidos (solo se aceptan minúsculas, números y guion)`, exit code 2.
+  - Cada tag se valida contra el charset `[a-z0-9-]+` después de normalizar internamente (`trim()` + minúsculas) para la comparación — pero los mensajes de error muestran el tag **tal cual lo escribió el usuario**, sin normalizar, para que pueda identificar exactamente qué tipeó. Cualquier carácter fuera de ese charset (espacios, acentos, símbolos, emojis) rechaza el comando completo: stderr `Error: el tag "<tag-tal-cual-lo-escribió-el-usuario>" contiene caracteres no permitidos (solo se aceptan minúsculas, números y guion)`, exit code 2.
   - Tags vacíos tras separar por coma (ej. `--tag trabajo,,ideas`) se descartan sin error.
-  - Tags repetidos dentro de la misma lista (ej. `--tag trabajo,trabajo`) son un error: stderr `Error: el tag "trabajo" está repetido`, exit code 2.
+  - Tags repetidos dentro de la misma lista, comparados ya normalizados (ej. `--tag trabajo,Trabajo`) son un error: stderr `Error: el tag "<tag-tal-cual-lo-escribió-el-usuario>" está repetido`, exit code 2.
   - La flag `--tag` no puede repetirse en la misma llamada (ej. `--tag trabajo --tag ideas`): stderr `Error: opción duplicada: --tag`, exit code 2. Solo se admite la forma de lista separada por comas.
-  - `--tag` sin valor a continuación (ej. `nota add "texto" --tag`) se trata como lista vacía: la nota se crea sin tags, sin error (hereda la regla de "tags vacíos se descartan sin error").
+  - **Tag por defecto:** si tras parsear `--tag` la lista de tags queda vacía (porque no se pasó `--tag`, porque se pasó sin valor, o porque todos los segmentos eran vacíos tras separar por coma), la nota se guarda con el tag reservado `sin_tag`. Este tag no pasa por la validación de charset de arriba (no es entrada de usuario) y por eso puede contener `_`; es el único tag del sistema con ese privilegio. Como consecuencia, un usuario nunca puede escribir literalmente `--tag sin_tag` a mano (el `_` lo rechazaría la validación normal) — es exclusivo del valor por defecto.
+  - Si el texto está vacío **y además** hay un error de tags, se reporta primero el error de texto (la validación de `texto` tiene prioridad sobre la de `--tag`).
 - Salida en éxito (stdout):
   ```
   Nota #4 creada (tags: trabajo, ideas)
+  ```
+  Sin tags explícitos:
+  ```
+  Nota #5 creada (tags: sin_tag)
   ```
 
 ### `nota list [--tag <tag>] [--page <n>] [--per-page <n>]`
@@ -166,4 +171,6 @@ Regla general: ningún stack trace de Node llega a la terminal del usuario. Todo
 | 9 | `created_at`: UTC en la base, local en la presentación (excepto en `export --format json`, que queda en UTC) | Consistencia interna + legibilidad humana donde corresponde, portabilidad donde corresponde. |
 | 10 | Base de datos en `db_core/notas.db`, a la raíz del proyecto (no `~/.nota`, no relativa al cwd de invocación) | Mantiene los datos dentro del repo del proyecto, visibles y versionables/ignorables explícitamente junto al código; consistente con que este es un proyecto de aprendizaje, no una herramienta para instalar globalmente (fuera de alcance, sección 2). |
 | 11 | Saltos de línea en texto: `\n` literal en `list`/`search`/`md`; reales (auto-escapados) en `json` | El JSON ya tiene una representación correcta de saltos de línea; la salida de texto plano no, así que se hace explícito. |
+| 12 | Nota sin tags se guarda con el tag por defecto `sin_tag` (en vez de cero tags) | Evita el caso especial "nota sin ninguna fila en `note_tags`" en el resto del sistema (listar/filtrar); toda nota tiene al menos un tag siempre. |
+| 13 | Errores de tag (charset/duplicado) muestran el texto tal cual lo escribió el usuario, no la versión normalizada | El usuario necesita ver exactamente qué tipeó para corregirlo; la normalización es un detalle interno de comparación. |
 
