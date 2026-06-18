@@ -52,4 +52,10 @@ describe("listNotes", () => {
 
     expect(result).toEqual({ ok: false, error: { kind: "per_page_too_large" } });
   });
+
+  it("rechaza --per-page que no sea un entero positivo (distinto de 'mayor a 20')", () => {
+    const result = listNotes(db, { perPage: "1.5" });
+
+    expect(result).toEqual({ ok: false, error: { kind: "invalid_per_page" } });
+  });
 });

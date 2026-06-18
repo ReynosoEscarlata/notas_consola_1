@@ -5,22 +5,18 @@ import { fileURLToPath } from "node:url";
 import { writeExportFile } from "./cli/export-file.js";
 import { formatNotesAsJson, formatNotesAsMarkdown } from "./cli/format-export.js";
 import { printNoteList } from "./cli/format-note-list.js";
-import { openDatabase } from "./db/connection.js";
+import { DatabaseCorruptedError, openDatabase } from "./db/connection.js";
 import { deleteNote, type DeleteNoteError } from "./logic/delete.js";
 import { exportNotes, type ExportNotesError } from "./logic/export.js";
 import { listNotes, type ListNotesError } from "./logic/list.js";
 import { addNote, type AddNoteError } from "./logic/notes.js";
+import { repairDatabase } from "./logic/repair.js";
 import { searchNotes, type SearchNotesError } from "./logic/search.js";
 import { EXIT_CODE } from "./types.js";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_DB_PATH = join(PROJECT_ROOT, "db_core", "notas.db");
 export const EXPORTS_DIR = join(PROJECT_ROOT, "exports");
-
-function notImplemented(command: string): void {
-  console.error(`Comando "${command}" todavía no está implementado.`);
-  process.exitCode = 1;
-}
 
 function formatAddNoteError(error: AddNoteError): string {
   switch (error.kind) {
@@ -226,7 +222,16 @@ program
 program
   .command("repair")
   .description("Repara la base de datos si está dañada")
-  .action(() => notImplemented("repair"));
+  .action(() => {
+    const result = repairDatabase(DEFAULT_DB_PATH);
+
+    if (result.backupPath === undefined) {
+      console.log("No había una base de datos previa.");
+    } else {
+      console.log(`Archivo anterior movido a ${result.backupPath}.`);
+    }
+    console.log(`Base de datos nueva lista en ${DEFAULT_DB_PATH}.`);
+  });
 
 // commander trata cualquier token que empiece con "-" como un intento de opción,
 // incluso números negativos; sin esto, "nota delete -3" falla con el error
@@ -240,18 +245,22 @@ if (deleteIndex !== -1 && /^-\d/.test(rawArgs[deleteIndex + 1] ?? "")) {
 try {
   program.parse(rawArgs, { from: "user" });
 } catch (error) {
-  if (!(error instanceof CommanderError)) {
-    throw error;
-  }
-
-  if (error.code === "commander.unknownOption") {
-    const flag = /'([^']+)'/.exec(error.message)?.[1] ?? error.message;
-    console.error(`Error: opción desconocida: ${flag}`);
-    process.exitCode = EXIT_CODE.INVALID_INPUT;
-  } else {
-    if (bufferedStderr !== "") {
-      process.stderr.write(bufferedStderr);
+  if (error instanceof CommanderError) {
+    if (error.code === "commander.unknownOption") {
+      const flag = /'([^']+)'/.exec(error.message)?.[1] ?? error.message;
+      console.error(`Error: opción desconocida: ${flag}`);
+      process.exitCode = EXIT_CODE.INVALID_INPUT;
+    } else {
+      if (bufferedStderr !== "") {
+        process.stderr.write(bufferedStderr);
+      }
+      process.exitCode = error.exitCode;
     }
-    process.exitCode = error.exitCode;
+  } else if (error instanceof DatabaseCorruptedError) {
+    console.error('Error: la base de datos parece estar dañada. Ejecuta "nota repair" para más información.');
+    process.exitCode = EXIT_CODE.STORAGE_ERROR;
+  } else {
+    console.error("Error: ocurrió un error interno inesperado.");
+    process.exitCode = EXIT_CODE.INTERNAL_ERROR;
   }
 }

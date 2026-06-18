@@ -47,6 +47,18 @@ describe("searchNotes", () => {
     expect(result).toEqual({ ok: false, error: { kind: "per_page_too_large" } });
   });
 
+  it("rechaza --page que no sea un entero positivo", () => {
+    const result = searchNotes(db, { word: "algo", page: "abc" });
+
+    expect(result).toEqual({ ok: false, error: { kind: "invalid_page" } });
+  });
+
+  it("rechaza --per-page que no sea un entero positivo (distinto de 'mayor a 20')", () => {
+    const result = searchNotes(db, { word: "algo", perPage: "1.5" });
+
+    expect(result).toEqual({ ok: false, error: { kind: "invalid_per_page" } });
+  });
+
   it("sin coincidencias devuelve notes: [] sin error", () => {
     addNote(db, "Comprar pan", undefined);
 

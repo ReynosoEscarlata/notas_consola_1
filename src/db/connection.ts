@@ -21,10 +21,22 @@ CREATE TABLE IF NOT EXISTS note_tags (
 );
 `;
 
+export class DatabaseCorruptedError extends Error {
+  constructor(dbPath: string, cause: unknown) {
+    super(`No se pudo abrir la base de datos en ${dbPath}`, { cause });
+    this.name = "DatabaseCorruptedError";
+  }
+}
+
 export function openDatabase(dbPath: string): Database.Database {
   mkdirSync(dirname(dbPath), { recursive: true });
-  const db = new Database(dbPath);
-  db.pragma("foreign_keys = ON");
-  db.exec(SCHEMA);
-  return db;
+
+  try {
+    const db = new Database(dbPath);
+    db.pragma("foreign_keys = ON");
+    db.exec(SCHEMA);
+    return db;
+  } catch (error) {
+    throw new DatabaseCorruptedError(dbPath, error);
+  }
 }

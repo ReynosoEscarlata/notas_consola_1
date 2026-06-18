@@ -44,4 +44,13 @@ describe("addNote", () => {
       error: { kind: "duplicate_tag", tag: "Trabajo" },
     });
   });
+
+  it("descarta segmentos vacíos tras separar por coma, sin error", () => {
+    const result = addNote(db, "texto", "trabajo,,ideas");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.note.tags).toEqual(["trabajo", "ideas"]);
+    }
+  });
 });

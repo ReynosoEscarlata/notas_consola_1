@@ -1,5 +1,6 @@
 node_modules/
 dist/
+coverage/
 db_core/*.db
 db_core/*.db.corrupted-*
 exports/
