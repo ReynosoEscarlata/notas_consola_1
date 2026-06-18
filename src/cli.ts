@@ -2,6 +2,7 @@
 import { Command, CommanderError } from "commander";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeExportFile } from "./cli/export-file.js";
 import { formatNotesAsJson, formatNotesAsMarkdown } from "./cli/format-export.js";
 import { printNoteList } from "./cli/format-note-list.js";
 import { openDatabase } from "./db/connection.js";
@@ -14,6 +15,7 @@ import { EXIT_CODE } from "./types.js";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_DB_PATH = join(PROJECT_ROOT, "db_core", "notas.db");
+export const EXPORTS_DIR = join(PROJECT_ROOT, "exports");
 
 function notImplemented(command: string): void {
   console.error(`Comando "${command}" todavía no está implementado.`);
@@ -200,7 +202,8 @@ program
   .command("export")
   .description("Exporta todas las notas")
   .requiredOption("--format <json|md>", "formato de salida")
-  .action((options: { format: string }) => {
+  .option("--file", "escribe el resultado en un archivo dentro de exports/ en vez de imprimirlo en stdout")
+  .action((options: { format: string; file?: boolean }) => {
     const db = openDatabase(DEFAULT_DB_PATH);
     const result = exportNotes(db, options.format);
     db.close();
@@ -208,6 +211,12 @@ program
     if (!result.ok) {
       console.error(formatExportNotesError(result.error));
       process.exitCode = EXIT_CODE.INVALID_INPUT;
+      return;
+    }
+
+    if (options.file) {
+      const filename = writeExportFile(EXPORTS_DIR, result.notes, result.format);
+      console.log(`Exportado a exports/${filename}`);
       return;
     }
 

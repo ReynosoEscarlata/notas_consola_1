@@ -47,6 +47,7 @@ CREATE TABLE note_tags (
 - `created_at` se guarda **siempre en UTC**. La conversión a hora local ocurre únicamente en la capa de presentación (ver sección 4), nunca en la base de datos ni en la lógica de negocio — esto evita bugs de doble conversión.
 - **Ubicación del archivo de base de datos:** `db_core/notas.db`, en la raíz del proyecto (al mismo nivel que `package.json`), independiente del directorio desde el que se invoque `nota` dentro del repo. La carpeta `db_core/` se crea automáticamente si no existe.
   - Nota de diseño para la implementación: la capa de lógica (la que se testea, sección 7) debe recibir la ruta de la base de datos como parámetro en vez de resolverla ella misma — así los tests usan una ruta temporal y nunca tocan `db_core/notas.db` real.
+- **Ubicación de los archivos exportados:** `exports/`, también en la raíz del proyecto (mismo criterio que `db_core/`), se crea automáticamente si no existe. Solo se usa cuando `nota export` corre con `--file` (ver sección 4).
 
 ## 4. Comandos
 
@@ -105,12 +106,12 @@ CREATE TABLE note_tags (
 - Error — `id` no es un entero positivo (ej. `4.5`, `"abc"`, `-3`, `0`): stderr `Error: Id no válido para eliminar`, exit code 2.
 - Error — `id` es un entero positivo válido pero no existe una nota con ese id: stderr `Error: no existe una nota con id <id>`, exit code 3.
 
-### `nota export --format <json|md>`
+### `nota export --format <json|md> [--file]`
 
-- Exporta todas las notas a **stdout** (permite `nota export --format json > backup.json`).
+- Exporta todas las notas. Por defecto (sin `--file`), a **stdout** (permite `nota export --format json > backup.json`) — comportamiento sin cambios respecto a antes de agregar `--file`.
 - `--format` obligatorio y case-insensitive (`json`, `JSON`, `Json` son equivalentes); valor distinto de `json`/`md` → stderr `Error: formato no soportado: <valor>`, exit code 2.
 - Formato `json`: array de objetos `{ id, text, tags, created_at }`, con `created_at` en **UTC crudo** (ISO 8601). Los saltos de línea en `text` quedan como saltos reales dentro del string — `JSON.stringify` ya los serializa como `\n` escapado en el archivo de salida, sin lógica especial.
-  - Sin notas: stdout `[]` (array JSON vacío, válido), exit code 0.
+  - Sin notas: `[]` (array JSON vacío, válido), exit code 0.
 - Formato `md`: una sección por nota, con `created_at` en **hora local** (igual criterio que `list`). Los saltos de línea en el texto se muestran como `\n` literal (igual criterio que `list`):
   ```
   ## Nota #4
@@ -119,7 +120,12 @@ CREATE TABLE note_tags (
 
   Revisar el PR de autenticación
   ```
-  - Sin notas: stdout `No hay notas para exportar.`, exit code 0.
+  - Sin notas: `No hay notas para exportar.`, exit code 0.
+- `--file`: opcional, flag booleana (sin valor, ej. `nota export --format json --file`). Cuando está presente:
+  - En vez de volcar el contenido a stdout, lo escribe en un archivo nuevo dentro de `exports/` (ver sección 3), con extensión `.json` o `.md` según `--format`.
+  - Nombre del archivo: `Export_notas_<fecha-hora-local>.<json|md>`, con la fecha-hora en formato `YYYY-MM-DD_HH-mm-ss` (hora **local** del sistema, sin `:` por compatibilidad con nombres de archivo en Windows). Ejemplo: `Export_notas_2026-06-17_23-16-52.json`.
+  - stdout solo imprime un mensaje de confirmación con la ruta relativa: `Exportado a exports/Export_notas_2026-06-17_23-16-52.json`, exit code 0. No vuelca el contenido completo a la terminal en este modo.
+  - Si se exportan dos veces dentro del mismo segundo, el segundo archivo sobrescribe al primero (mismo nombre); no se generan sufijos para evitar colisiones — caso límite aceptado, no resuelto en v1.
 
 ### `nota --help` / `nota <comando> --help`
 
@@ -162,7 +168,7 @@ Regla general: ningún stack trace de Node llega a la terminal del usuario. Todo
 |---|----------|---------|
 | 1 | 3 tablas normalizadas (`notes`, `tags`, `note_tags`) | Relacionalmente correcto; el `JOIN` extra es aceptable para el alcance. |
 | 2 | `id` autoincremental, no UUID | Más fácil de teclear en `delete`. |
-| 3 | `export` escribe a stdout | El usuario decide si redirige la salida a un archivo. |
+| 3 | `export` escribe a stdout por defecto; con `--file`, escribe a `exports/` en vez de stdout | El usuario decide si redirige la salida a mano (comportamiento original) o pide que `nota` cree el archivo directamente. |
 | 4 | `search` busca solo en el texto, no en tags | Simplifica el caso de uso principal de búsqueda. |
 | 5 | `nota repair` = backup + BD nueva vacía | No intenta recuperación de datos; es el camino simple y predecible. |
 | 6 | Tags restringidos a `[a-z0-9-]`, sin duplicados, solo formato lista por comas | Evita ambigüedad al parsear `--tag a,b,c` y problemas de codificación/orden en filtros. |
@@ -171,6 +177,7 @@ Regla general: ningún stack trace de Node llega a la terminal del usuario. Todo
 | 9 | `created_at`: UTC en la base, local en la presentación (excepto en `export --format json`, que queda en UTC) | Consistencia interna + legibilidad humana donde corresponde, portabilidad donde corresponde. |
 | 10 | Base de datos en `db_core/notas.db`, a la raíz del proyecto (no `~/.nota`, no relativa al cwd de invocación) | Mantiene los datos dentro del repo del proyecto, visibles y versionables/ignorables explícitamente junto al código; consistente con que este es un proyecto de aprendizaje, no una herramienta para instalar globalmente (fuera de alcance, sección 2). |
 | 11 | Saltos de línea en texto: `\n` literal en `list`/`search`/`md`; reales (auto-escapados) en `json` | El JSON ya tiene una representación correcta de saltos de línea; la salida de texto plano no, así que se hace explícito. |
+| 12 | Nombre de archivo de `export --file` usa `_`/`-` en vez de `:` en la fecha-hora | `:` es un carácter inválido en nombres de archivo en Windows; el formato `YYYY-MM-DD_HH-mm-ss` es seguro en cualquier sistema de archivos y ordena alfabéticamente igual que cronológicamente. |
 | 12 | Nota sin tags se guarda con el tag por defecto `sin_tag` (en vez de cero tags) | Evita el caso especial "nota sin ninguna fila en `note_tags`" en el resto del sistema (listar/filtrar); toda nota tiene al menos un tag siempre. |
 | 13 | Errores de tag (charset/duplicado) muestran el texto tal cual lo escribió el usuario, no la versión normalizada | El usuario necesita ver exactamente qué tipeó para corregirlo; la normalización es un detalle interno de comparación. |
 
