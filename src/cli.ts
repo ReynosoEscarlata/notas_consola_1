@@ -6,6 +6,7 @@ import { printNoteList } from "./cli/format-note-list.js";
 import { openDatabase } from "./db/connection.js";
 import { listNotes, type ListNotesError } from "./logic/list.js";
 import { addNote, type AddNoteError } from "./logic/notes.js";
+import { searchNotes, type SearchNotesError } from "./logic/search.js";
 import { EXIT_CODE } from "./types.js";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +30,19 @@ function formatAddNoteError(error: AddNoteError): string {
 
 function formatListNotesError(error: ListNotesError): string {
   switch (error.kind) {
+    case "invalid_page":
+      return "Error: --page debe ser un entero positivo";
+    case "invalid_per_page":
+      return "Error: --per-page debe ser un entero positivo";
+    case "per_page_too_large":
+      return "Error: --per-page no puede ser mayor a 20";
+  }
+}
+
+function formatSearchNotesError(error: SearchNotesError): string {
+  switch (error.kind) {
+    case "empty_word":
+      return "Error: el término de búsqueda no puede estar vacío";
     case "invalid_page":
       return "Error: --page debe ser un entero positivo";
     case "invalid_per_page":
@@ -114,7 +128,25 @@ program
   .argument("<palabra>", "término de búsqueda")
   .option("--page <n>", "número de página", "1")
   .option("--per-page <n>", "notas por página (máx. 20)", "10")
-  .action(() => notImplemented("search"));
+  .action((palabra: string, options: { page: string; perPage: string }) => {
+    const db = openDatabase(DEFAULT_DB_PATH);
+    const result = searchNotes(db, { word: palabra, page: options.page, perPage: options.perPage });
+    db.close();
+
+    if (!result.ok) {
+      console.error(formatSearchNotesError(result.error));
+      process.exitCode = EXIT_CODE.INVALID_INPUT;
+      return;
+    }
+
+    printNoteList(
+      result.result.notes,
+      result.result.page,
+      result.result.totalPages,
+      result.result.total,
+      `No se encontraron notas que coincidan con "${palabra}".`,
+    );
+  });
 
 program
   .command("delete")
