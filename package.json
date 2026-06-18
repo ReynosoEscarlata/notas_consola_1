@@ -1,0 +1,28 @@
+{
+  "name": "nota",
+  "version": "0.1.0",
+  "description": "CLI de notas personales con etiquetas, búsqueda y persistencia en SQLite.",
+  "type": "module",
+  "bin": {
+    "nota": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.9.3",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.6"
+  }
+}
