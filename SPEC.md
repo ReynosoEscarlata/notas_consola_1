@@ -45,8 +45,8 @@ CREATE TABLE note_tags (
 
 - `id` es un entero autoincremental (no UUID), para que sea cómodo escribirlo a mano en `nota delete <id>`.
 - `created_at` se guarda **siempre en UTC**. La conversión a hora local ocurre únicamente en la capa de presentación (ver sección 4), nunca en la base de datos ni en la lógica de negocio — esto evita bugs de doble conversión.
-- **Ubicación del archivo de base de datos:** `~/.nota/notas.db` (resuelto vía `os.homedir()`), independiente del directorio desde el que se ejecute `nota`. La carpeta `~/.nota/` se crea automáticamente si no existe.
-  - Nota de diseño para la implementación: la capa de lógica (la que se testea, sección 7) debe recibir la ruta de la base de datos como parámetro en vez de resolverla ella misma — así los tests usan una ruta temporal y nunca tocan `~/.nota/notas.db` real.
+- **Ubicación del archivo de base de datos:** `db_core/notas.db`, en la raíz del proyecto (al mismo nivel que `package.json`), independiente del directorio desde el que se invoque `nota` dentro del repo. La carpeta `db_core/` se crea automáticamente si no existe.
+  - Nota de diseño para la implementación: la capa de lógica (la que se testea, sección 7) debe recibir la ruta de la base de datos como parámetro en vez de resolverla ella misma — así los tests usan una ruta temporal y nunca tocan `db_core/notas.db` real.
 
 ## 4. Comandos
 
@@ -140,7 +140,7 @@ Regla general: ningún stack trace de Node llega a la terminal del usuario. Todo
 ## 6. Base de datos corrupta y `nota repair`
 
 - Si al abrir la conexión SQLite falla (archivo corrupto, formato inválido, etc.): la app no crashea. Mensaje en stderr: `Error: la base de datos parece estar dañada. Ejecuta "nota repair" para más información.`, exit code 4.
-- `nota repair`: mueve el archivo corrupto a `~/.nota/notas.db.corrupted-<timestamp>` y crea una base de datos nueva y vacía en `~/.nota/notas.db`. **No intenta recuperar el contenido** — es un reset, no una reparación de datos.
+- `nota repair`: mueve el archivo corrupto a `db_core/notas.db.corrupted-<timestamp>` y crea una base de datos nueva y vacía en `db_core/notas.db`. **No intenta recuperar el contenido** — es un reset, no una reparación de datos.
 - Si `nota repair` se ejecuta y el archivo no existe todavía (primera vez que se usa `nota`): simplemente crea la base de datos nueva, sin backup (no hay nada que respaldar). Mismo mensaje de éxito que el caso normal.
 - Salida de `nota repair` en éxito: confirma la ruta del backup creado (si aplica) y que la base nueva está lista. Exit code 0.
 
@@ -164,6 +164,6 @@ Regla general: ningún stack trace de Node llega a la terminal del usuario. Todo
 | 7 | Mensaje distinto para "falta el argumento" vs "argumento vacío" | Son errores de usuario distintos y merecen feedback distinto. |
 | 8 | `list`/`search` paginados (máx. 20 por página), orden por `id` descendente | Evita volcar cientos de notas en una sola pantalla. |
 | 9 | `created_at`: UTC en la base, local en la presentación (excepto en `export --format json`, que queda en UTC) | Consistencia interna + legibilidad humana donde corresponde, portabilidad donde corresponde. |
-| 10 | Base de datos en `~/.nota/notas.db`, fija (no relativa al cwd) | Una sola fuente de verdad por usuario; `nota list` da el mismo resultado sin importar desde dónde se invoque. |
+| 10 | Base de datos en `db_core/notas.db`, a la raíz del proyecto (no `~/.nota`, no relativa al cwd de invocación) | Mantiene los datos dentro del repo del proyecto, visibles y versionables/ignorables explícitamente junto al código; consistente con que este es un proyecto de aprendizaje, no una herramienta para instalar globalmente (fuera de alcance, sección 2). |
 | 11 | Saltos de línea en texto: `\n` literal en `list`/`search`/`md`; reales (auto-escapados) en `json` | El JSON ya tiene una representación correcta de saltos de línea; la salida de texto plano no, así que se hace explícito. |
 

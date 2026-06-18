@@ -1,0 +1,5 @@
+node_modules/
+dist/
+db_core/*.db
+db_core/*.db.corrupted-*
+*.log
