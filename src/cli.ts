@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { printNoteList } from "./cli/format-note-list.js";
 import { openDatabase } from "./db/connection.js";
+import { deleteNote, type DeleteNoteError } from "./logic/delete.js";
 import { listNotes, type ListNotesError } from "./logic/list.js";
 import { addNote, type AddNoteError } from "./logic/notes.js";
 import { searchNotes, type SearchNotesError } from "./logic/search.js";
@@ -49,6 +50,15 @@ function formatSearchNotesError(error: SearchNotesError): string {
       return "Error: --per-page debe ser un entero positivo";
     case "per_page_too_large":
       return "Error: --per-page no puede ser mayor a 20";
+  }
+}
+
+function formatDeleteNoteError(error: DeleteNoteError): string {
+  switch (error.kind) {
+    case "invalid_id":
+      return "Error: Id no válido para eliminar";
+    case "not_found":
+      return `Error: no existe una nota con id ${error.id}`;
   }
 }
 
@@ -152,7 +162,19 @@ program
   .command("delete")
   .description("Elimina una nota por id")
   .argument("<id>", "id entero positivo de la nota")
-  .action(() => notImplemented("delete"));
+  .action((id: string) => {
+    const db = openDatabase(DEFAULT_DB_PATH);
+    const result = deleteNote(db, id);
+    db.close();
+
+    if (!result.ok) {
+      console.error(formatDeleteNoteError(result.error));
+      process.exitCode = result.error.kind === "not_found" ? EXIT_CODE.NOT_FOUND : EXIT_CODE.INVALID_INPUT;
+      return;
+    }
+
+    console.log(`Nota #${result.id} eliminada.`);
+  });
 
 program
   .command("export")
@@ -165,4 +187,13 @@ program
   .description("Repara la base de datos si está dañada")
   .action(() => notImplemented("repair"));
 
-program.parse();
+// commander trata cualquier token que empiece con "-" como un intento de opción,
+// incluso números negativos; sin esto, "nota delete -3" falla con el error
+// genérico de commander en vez del mensaje propio de delete.ts.
+const rawArgs = process.argv.slice(2);
+const deleteIndex = rawArgs.indexOf("delete");
+if (deleteIndex !== -1 && /^-\d/.test(rawArgs[deleteIndex + 1] ?? "")) {
+  rawArgs.splice(deleteIndex + 1, 0, "--");
+}
+
+program.parse(rawArgs, { from: "user" });
